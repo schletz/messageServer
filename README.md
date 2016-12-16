@@ -8,7 +8,7 @@ Ein Musterwebservice in Node JS mit folgenden Features:
 ## Pakete
 - express und body-parser für das Routing
 - nodejs-websocket für den Websocket
-Details siehe <code>package.json</code>
+- Weitere Details siehe <code>package.json</code>
 
 ## Installation
 Mit <code>git clone https://github.com/schletz/messageServer.git</code> das Repository auf den lokalen Rechner kopieren. 
