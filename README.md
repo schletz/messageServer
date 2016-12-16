@@ -14,6 +14,6 @@ Ein Musterwebservice in Node JS mit folgenden Features:
 Mit <code>git clone https://github.com/schletz/messageServer.git</code> das Repository auf den lokalen Rechner kopieren. 
 Danach mit <code>npm install</code> die in der package.json enthaltenen Abhängigkeiten installieren.
 
-Mit <code>node server.js</node> kann der Server in der Konsole gestartet werden. <b>Achtung:</b> damit der Server lauffähig ist,
+Mit <code>node server.js</code> kann der Server in der Konsole gestartet werden. <b>Achtung:</b> damit der Server lauffähig ist,
 wird zu Testzwecken der private und public Key für HTTPS mitgeliefert. Dieser muss natürlich durch eigene Keys ersetzt werden!
 Unter [http://www.selfsignedcertificate.com/] kann einfach ein solches Zertifikat generiert werden.
