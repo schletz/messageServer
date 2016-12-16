@@ -19,21 +19,12 @@ SELECT * FROM messages;
 
 // INSTALLATION
 
-// 1) Node js in C:\nodejs installieren (nicht C:\Programme.....)
-// 2) server.js in ein Verzeichnis kopieren (z. B. C:\nodejs\data)
-// 3) Im Verzeichnis von server.js npm install express
-//                                 npm install body-parser
-//                                 npm install nodejs-websocket
-// in der Eingabeaufforderung aufrufen.
-// 4) Server mit node server.js starten.
-//
-// Doku siehe
-// http://expressjs.com/de/api.html
+// 1) Mit git clone https://github.com/schletz/messageServer.git das Repository kopieren
+// 2) In diesem Verzeichnis mit npm install die abhängigen Pakete laden.
+// 3) Mit node server.js den Server starten.
 
 /*
- * Laden der erforderlichen Module. Diese müssen ggf. mit 
- * npm install (modulename)
- * installiert werden.
+ * Laden der erforderlichen Module.
  */
 var fs = require('fs');                    // Für das Lesen der Zertifikate.
 var express = require("express");          // Für das Routing.
