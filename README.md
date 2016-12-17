@@ -2,11 +2,12 @@
 Ein Musterwebservice in Node JS mit folgenden Features:
 - token based authentication
 - https Verschlüsselung
+- ORM Mapper für den Datenbankzugriff
 - Websocket Server
-- MySQL Datenbankzugriff
 
 ## Pakete
 - express und body-parser für das Routing
+- sequelize als ORM Mapper und Datanbankabstraktion
 - nodejs-websocket für den Websocket
 - Weitere Details siehe <code>package.json</code>
 
