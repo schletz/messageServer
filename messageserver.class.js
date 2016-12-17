@@ -1,25 +1,34 @@
 var ws     = require("nodejs-websocket");   // npm install nodejs-websocket
-var mysql  = require('mysql');              // npm install mysql
 var crypto = require('crypto');             // npm install crypto
 
 /*
  * Messageserver(json, json)
  */
-function Messageserver(dbConfig, websocketConfig, serverConfig)
+function Messageserver(dbModel, config)
 {
     this.userlist = {};
-    this.authTimeout = isType("number", serverConfig.authTimeout) ?
-        serverConfig.authTimeout : 3600;
-    this.dbConnection = mysql.createConnection(dbConfig);
+    this.authTimeout =
+    this.model = dbModel;
 
     this.websocketServer = ws.
         createServer(this.onWebsocketConnect).
-        listen(websocketConfig.websocketPort);
+        listen(config.websocketPort);
+
+/*
+this.model.User.findOne({where: {username:"Max"}, defaults: {username: "Max", pass:"1234", email:"max@muster.at"}}).then(function(max)
+{
+    max.getMessages();
+    max.createMessage({text:"Hallo"}).then(function(maxMessage) {
+        maxMessage.getAutor().then(function(max) { console.log(JSON.stringify(max))});
+    });
+});
+
+*/
 }
 
 /* 
  * setHeader(json, json, function)
- * Setzt die HTTP Header, sodass von jeder Domäne aus das Webservice aufgerufen werden kann.
+ * Setzt die HTTP Header, sodass von jeder DomÃ¤ne aus das Webservice aufgerufen werden kann.
  * Weiters wird der Content Type der Antwort auf JSON gesetzt.
  */
 Messageserver.prototype.setHeader = function (req, res, next) {
@@ -46,22 +55,30 @@ Messageserver.prototype.onWebsocketConnect = function(conn) {
 
 /*
  * getMessages
- * Liest alle Datensätze aus der messages Tabelle.
+ * Liest alle Nachrichten aus der Messages Tabelle und liefert sie zurÃ¼ck.
+ * @param {function} onSuccess(rows:json) Ein JSON Array mit allen Nachrichten.
+ * @param {function} onError(message:string) Fehlermeldung, falls die Datenbankabfrage nicht
+ * funktioniert hat.
  */
 Messageserver.prototype.getMessages = function (onSuccess, onError) {
-    try {
-        this.dbConnection.query('SELECT * FROM messages ORDER BY M_Created',
-            function (err, rows, fields) {
-            if (err !== null) {
-                if (typeof onError === "function") onError(err)
-                return;
-            }
-            if (typeof onSuccess === "function") onSuccess(rows);
-        });
-    }
-    catch (err) {
-        if (typeof onError === "function") onError(err)
-    }
+    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
+    var onError   = typeof onError   === "function" ? onError   : function() {};
+
+    /* Auch den User zur Nachricht raussuchen. Siehe Eager loading auf 
+     * http://docs.sequelizejs.com/en/latest/docs/models-usage/
+     * Das as muss mit dem im Model bei belongsTo() definiertem Alias Ã¼bereinstimmen.
+     */
+    this.model.Message.findAll({include:[{model:this.model.User, as:'autor'}]}).then(function(result) {
+        onSuccess(result);
+    }).catch (onError);
+
+    /* So kÃ¶nnte man alle User mit ihren Nachrichten auslesen. Da kein as definiert wurde, muss es
+     * auch nicht angegeben werden.
+    /*
+    this.model.User.findAll({include:[{model:this.model.Message}]}).then(function(result) {
+        onSuccess(result);
+    }).catch (onError);    
+    */
 };
 
 /*
@@ -88,95 +105,133 @@ Messageserver.prototype.sendMessageToAll = function (messageStr, onSuccess, onEr
 };
 
 /*
- * checkCredentials(json, json, function)
- * Prüft den übergebenen Token. Wenn dieser gültig ist, dann wird die nächste Methode des Routings
- * aufgerufen. Ist der Token ungültig, wird {error: string} gesendet, wobei der String 
- * "MISSING_TOKEN", "INVALID_TOKEN",  "NOT_AUTH", "AUTH_TIMEOUT" oder "INVALID_CREDENTIALS" 
- * sein kann.
- * POST Parameter: token
- */
+* checkCredentials
+* PrÃ¼ft den Ã¼bergebenen Token. Wenn dieser gÃ¼ltig ist, dann wird die in onSuccess Ã¼bergebene 
+* Funktion aufgerufen und die GÃ¼ltigkeitszeit des Tokens neu gesetzt.
+* @param {string} token Der Ã¼bermittelte, zu prÃ¼fende Token.
+* @param {string} userAgent Der Ã¼bermittelte HTTP User Agent.
+* @param {string} clientIp Die IP Adresse des Clients.
+* @param {function} onSuccess() Wird aufgerufen, wenn der Token gÃ¼ltig ist.
+* @param {function} onError(message:string) Wenn der Token Ã¼ntÃ¼ltig ist, wird die message auf
+* "INVALID_ARGUMENT", "INVALID_TOKEN",  "NOT_AUTH", "AUTH_TIMEOUT" oder "INVALID_CREDENTIALS" 
+* gesetzt.
+*/
+Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp, onSuccess, onError) {
+    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
+    var onError   = typeof onError   === "function" ? onError   : function() {};
 
-    Messageserver.prototype.checkCredentials = function (req, res, next) {
-    try
-    {
-        /* POST Parameter token überhaupt übermittelt? */
-        if (!isType("string", req.body.token)) {
-            throw "MISSING_TOKEN";
-        }
+    /* Argumente Ã¼bergeben? */
+    if (!isType("string", token))     {  onError("INVALID_ARGUMENT");  return;  }
+    if (!isType("string", userAgent)) {  onError("INVALID_ARGUMENT");  return;  }
+    if (!isType("string", clientIp )) {  onError("INVALID_ARGUMENT");  return;  }
 
-        var tokenDecoded = new Buffer(req.body.token, 'base64').toString('utf8').split(":");
-        if (tokenDecoded.length != 2) {
-            throw "INVALID_TOKEN";
-        }
-        /* Ist der User in unserer Userlist? */
-        var userinfo = this.userlist[tokenDecoded[0]];
-        if (!isType("object", userinfo)) {
-            throw "NOT_AUTH";
-        }
-        /* 
-         * Stimmt der Hashwert von IP, Useragent und Secret, wenn wir ihn neu generieren, 
-         * mit dem übermittelten überein und ist er auch nicht abgelaufen? 
-         */
-        var toHash = req.headers["user-agent"] +
-                     req.connection.remoteAddress +
-                     userinfo.secret;
-        var hashed = crypto.createHmac('sha256', userinfo.secret)
-                           .update(toHash)
-                           .digest('base64');
-        /* Ist der Token abgelaufen? */
-        if (new Date().valueOf() - this.authTimeout * 1000 > userinfo.lastActivity) {
-            throw "AUTH_TIMEOUT";
-        }
-        /* Stimmt der Hashwert noch? */
-        if (tokenDecoded[1] !== hashed) {
-            throw "INVALID_CREDENTIALS";
-        }
-        /* Damit das Timeout von der letzten Aktivität gerechnet wird, setzen wir es neu. */
-        userinfo.lastActivity = new Date().valueOf();
-        next();
+    var tokenDecoded = new Buffer(token, 'base64').toString('utf8').split(":");
+    if (tokenDecoded.length != 2) {
+        onError("INVALID_TOKEN");
+        return;        
     }
-    catch (e)
-    {
-        res.send(JSON.stringify({ error: e }));
+    /* Ist der User in unserer Userlist? */
+    var userinfo = this.userlist[tokenDecoded[0]];
+    if (!isType("object", userinfo))  {  onError("NOT_AUTH"); return;  }
+    /* 
+     * Stimmt der Hashwert von IP, Useragent und Secret, wenn wir ihn neu generieren, 
+     * mit dem Ã¼bermittelten Ã¼berein und ist er auch nicht abgelaufen? 
+     */
+    var toHash = userAgent + clientIp + userinfo.secret;
+    var hashed = crypto.createHmac('sha256', userinfo.secret)
+                        .update(toHash)
+                        .digest('base64');
+    /* Ist der Token abgelaufen? */
+    if (new Date().valueOf() - this.authTimeout * 1000 > userinfo.lastActivity) {
+        onError("AUTH_TIMEOUT");
+        return;        
     }
-
+    /* Stimmt der Hashwert noch? */
+    if (tokenDecoded[1] !== hashed) {
+        onError("INVALID_CREDENTIALS");
+        return;        
+    }
+    /* Damit das Timeout von der letzten AktivitÃ¤t gerechnet wird, setzen wir es neu. */
+    userinfo.lastActivity = new Date().valueOf();
+    onSuccess();
 };
 
 /*
- * createCredentials(json)
- * Prüft die Daten des übergebenen Benutzers und liefert einen Token, der mit jedem Request 
+ * createCredentials
+ * PrÃ¼ft die Daten des Ã¼bergebenen Benutzers und liefert einen Token, der mit jedem Request 
  * mitgesendet wird. 
- * Parameter userinfo: {user:string, pass:string useragent:string, ip:string}
- * Return: token oder false, wenn der User nicht bekannt ist.
+ * @param {json} userinfo {user:string, pass:string useragent:string, ip:string}
+ * @param {function} onSuccess(token:string) Bei Erfolg wird der Token zurÃ¼ckgegeben
+ * @param {function} onError(message:string) Im Fehlerfall wird INVALID_ARGUMENT, INVALID_USER oder 
+ * INVALID_PASSWORD zurÃ¼ckgegeben.
  */
-Messageserver.prototype.createCredentials = function (userinfo) {
-    if (!isType("string", userinfo.user, userinfo.pass)) return false;
+Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onError) {
+    var self = this;                          // Da in der Callback Methode der DB this sich Ã¤ndert.
+    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
+    var onError = typeof onError === "function" ? onSuccess : function() {};
 
-    /* TODO: User gegen die Datenbank prüfen. */
-    var secret = crypto.randomBytes(32).toString('base64');
-    var toHash = userinfo.useragent +
-                 userinfo.ip +
-                 secret;
-    var hashed = crypto.createHmac('sha256', secret)
-                       .update(toHash)
-                       .digest('base64');
-    var token = new Buffer(userinfo.user + ":" + hashed)
-        .toString('base64');
+    if (!isType("string", userinfo.user, userinfo.pass)) {
+        onError("INVALID_ARGUMENT");
+        return;
+    }
 
-    /* Zum Testen */
-    console.log("Token:", token);
-    console.log("Decodierder Token:", new Buffer(token, 'base64').toString('utf8'));
+    /* Den Ã¼bergebenen User in der Datenbank suchen */
+    this.model.User.findOne({where: {username: userinfo.user}}).then(function(currentUser)
+    {
+        try
+        {
+            /* Benutzer ist vorhanden */
+            if (currentUser !== null)
+            {
+                /* LÃ¤sst sich aus dem Passwort und dem gespeicherten Salt der gespeicherten Hashwert
+                * generieren? */
+                var passwordHash = crypto.createHmac('sha256', currentUser.salt)
+                                        .update(userinfo.pass)
+                                        .digest('base64');
+                console.log(passwordHash);
 
-    /* Das Secret und den Timestamp zu den Userinfos dazugeben und den User anlegen. */
-    userinfo.secret = secret;
-    userinfo.lastActivity = new Date().valueOf();
-    this.userlist[userinfo.user] = userinfo;
-    return token;
+                /* Hash ungleich: falsches Passwort! */
+                if (passwordHash !== currentUser.pass) {
+                    onError("INVALID_PASSWORD");
+                    return;
+                }                                  
+
+                /* Alles OK: Token generieren und in die lokale Userliste des Servers eintragen */
+                var secret = crypto.randomBytes(32).toString('base64');
+                var toHash = userinfo.useragent +
+                            userinfo.ip +
+                            secret;
+                var hashed = crypto.createHmac('sha256', secret)
+                                .update(toHash)
+                                .digest('base64');
+                var token = new Buffer(userinfo.user + ":" + hashed)
+                    .toString('base64');
+
+                /* Zum Testen */
+                console.log("Token:", token);
+                console.log("Decodierder Token:", new Buffer(token, 'base64').toString('utf8'));
+
+                /* Das Secret und den Timestamp zu den Userinfos dazugeben und den User anlegen. */
+                userinfo.secret = secret;
+                userinfo.lastActivity = new Date().valueOf();
+                self.userlist[userinfo.user] = userinfo;
+                onSuccess(token);
+            }
+            else {
+                onError("INVALID_USER");
+            }
+        }
+        catch (err)
+        {
+            onError(err.message);
+        }
+
+    }).catch(onError);
 };
 
 /*
  * logger.show(string) bzw. logger.error(string)
- * Gibt den übergebenen String mit einem Timestamp in der Konsole aus.
+ * Gibt den ï¿½bergebenen String mit einem Timestamp in der Konsole aus.
  * Parameter message: Auszugebende Meldung
  */
 Messageserver.logger = {
@@ -192,7 +247,7 @@ Messageserver.logger = {
 
 /*
  * isType(string, variable1, variable2, ...)
- * Prüft, ob alle Variablen den im 1. Parameter angegebenen String entsprechen.
+ * Prï¿½ft, ob alle Variablen den im 1. Parameter angegebenen String entsprechen.
  * Der Typname kann folgende Werte beinhalten: 
  * "undefined", "object", "boolean", "number", "string", "symbol", "function"
  */

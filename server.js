@@ -20,27 +20,28 @@ SELECT * FROM messages;
 // INSTALLATION
 
 // 1) Mit git clone https://github.com/schletz/messageServer.git das Repository kopieren
-// 2) In diesem Verzeichnis mit npm install die abhängigen Pakete laden.
+// 2) In diesem Verzeichnis mit npm install die abhï¿½ngigen Pakete laden.
 // 3) Mit node server.js den Server starten.
 
 /*
  * Laden der erforderlichen Module.
  */
-var fs = require('fs');                    // Für das Lesen der Zertifikate.
-var express = require("express");          // Für das Routing.
-var bodyParser = require('body-parser');   // Damit POST Variablen gelesen werden können.
+var fs = require('fs');                    // FÃ¼r das Lesen der Zertifikate.
+var express = require("express");          // FÃ¼r das Routing.
+var bodyParser = require('body-parser');   // Damit POST Variablen gelesen werden kÃ¶nnen.
 var uuid = require('node-uuid');           // Um eine GUID zu generieren.
 var https = require('https');              // Der HTTP Server mit der listen Methode.
 
+var Db = require('./messageserver.database');  // Tabellendefinitionen laden
 var Messageserver = require('./messageserver.class');
 /*
- * Porteinstellungen. Niedere Ports (< 1024) erfordern u. U. root Rechte beim Ausführen des Servers.
+ * Porteinstellungen. Niedere Ports (< 1024) erfordern u. U. root Rechte beim AusfÃ¼hren des Servers.
  */
 var serverPort = 25221;
 var websocketPort = 25222;
 
 /*
- * SSH Keys laden. Diese können am Einfachsten auf
+ * SSH Keys laden. Diese kÃ¶nnen am Einfachsten auf
  * [ http://www.selfsignedcertificate.com/ ]
  * generiert werden. Danach die Endung cert auf crt umbenennen.
  */
@@ -49,16 +50,10 @@ var certificate = fs.readFileSync('localhost.crt', 'utf8');
 var credentials = { key: privateKey, cert: certificate };
 
 /* Instanzieren des Servers mit den Datenbank- und Websocketeinstellungen */
-var myServer = new Messageserver({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'messageDb'
-}, {
-    websocketPort: websocketPort
-}, {
-    authTimeout: 3600
-});
+var myServer = new Messageserver(Db.loadDatabase("sqlite://messagedb.db"), {
+                                    websocketPort: websocketPort,
+                                    authTimeout: 3600});
+
 
 /* 
  * *************************************************************************************************
@@ -90,14 +85,19 @@ app.use(bodyParser.urlencoded({     // to support URL-encoded bodies
  * checkCredentials Methode auf die nodejs Instanz zeigt.
  */
 function checkCredentials (req, res, next) {
-    myServer.checkCredentials(req, res, next);
+    myServer.checkCredentials(req.body.token, req.headers["user-agent"] , 
+        req.connection.remoteAddress,  function() {
+            next();
+        }, function(err) {
+            res.send(JSON.stringify({error: err}));
+        });
 }
 
 app.all("/sendMessage", myServer.setHeader, function (req, res) {
     var guid = uuid.v1(); // UUID V1, damit der generierte Wert aufsteigend ist.
-    // Wenn der Parameter message über POST gesendet wurde: diesen verwenden. 
+    // Wenn der Parameter message ï¿½ber POST gesendet wurde: diesen verwenden. 
     // Ansonsten den GET Parameter message nehmen.
-    // Die Namen der Felder müssen mit denen in der Datenbank übereinstimmen.
+    // Die Namen der Felder mï¿½ssen mit denen in der Datenbank ï¿½bereinstimmen.
     var messageData = {
         M_ID: guid, M_ClientIP: req.connection.remoteAddress,
         M_UserAgent: req.headers["user-agent"],
@@ -122,8 +122,11 @@ app.all("/sendMessage", myServer.setHeader, function (req, res) {
  * Return: [{M_ID: string, M_Message: string, M_ClientIP: string, M_UserAgent: string}...]
  */
 app.all("/getMessages", myServer.setHeader, checkCredentials, function (req, res) {
-    myServer.getMessages(function (rows) { res.send(JSON.stringify(rows));  },    // OnSuccess
-                         function (err)  { Messageserver.logger.error(err); });   // OnError
+    myServer.getMessages(function (rows) {         // OnSuccess
+        res.send(JSON.stringify(rows));
+    }, function (err)  {                           // OnError
+        Messageserver.logger.error(err); 
+    });   
 });
 
 /*
@@ -134,16 +137,20 @@ app.all("/getMessages", myServer.setHeader, checkCredentials, function (req, res
  *         {error: "USER_INVALID"} wenn die Daten falsch sind
  */
 app.all("/auth", myServer.setHeader, function (req, res) {
-    var token = myServer.createCredentials({
-        user: req.body.user,
-        pass: req.body.pass,
-        useragent: req.headers["user-agent"],
-        ip: req.connection.remoteAddress
-    });
-    if (token !== false)
-        res.send(JSON.stringify({ token: token }));
-    else
-        res.send(JSON.stringify({ error: "USER_INVALID" }));
+    myServer.createCredentials({
+            user: req.body.user,
+            pass: req.body.pass,
+            useragent: req.headers["user-agent"],
+            ip: req.connection.remoteAddress
+        }, 
+        /* onSuccess */
+        function(token) {
+            res.send(JSON.stringify({ token: token }));
+        }, 
+        /* onError */
+        function(message) {
+            res.send(JSON.stringify({ error: message }));
+        });
 });
 
 /* 
@@ -156,7 +163,7 @@ app.use(function (req, res) {
 
 /* 
  * *************************************************************************************************
-   PORT ÖFFNEN
+   PORT ï¿½FFNEN
  * *************************************************************************************************
  */
 console.log("\
