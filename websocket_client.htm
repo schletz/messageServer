@@ -7,74 +7,102 @@
         p {
             margin:0px;
         }
+        h1 { 
+            font-size:12pt;
+        }
     </style>
     <script src="https://code.jquery.com/jquery-3.1.1.min.js" type="text/javascript"></script>
 
     <script type="text/javascript">
-        var sendUrl = "http://localhost:25221/sendMessage";
-        var receiveUrl = "http://localhost:25221/getMessages";
-        var websocketServer = "ws://localhost:25222/chatserver";
-        var count = 0;
-    </script>
-    <script type="text/javascript">
-        var ws = new WebSocket(websocketServer);
-        ws.onerror = function (err) {
-            console.log(event.data);
-        };
-        ws.onopen = function (event) {
-            ws.send("Neuer Client meldet sich.");
-        };
-        ws.onmessage = function (event) {
-            data = JSON.parse(event.data);
-            appendMessages(data);
-        };
-    </script>
-    <script type="text/javascript">
-        function sendLogin()
-        {
-            var username = $('#username').val();
-            var passwort = $('#passwort').val();
-            console.log(btoa(username + ":" + passwort));
-            $.post
-            ({
-                url: "http://localhost:25221/login",
-                data: {username: username, password: passwort},
-                success: function () {
-                    $.get(receiveUrl, function (data) {
-                        appendMessages(data);
-                    });
-                }
-            });
-        }
-        function appendMessages(data)
-        {
-            if (!Array.isArray(data))
-                data = [data];
-            for (var i = 0; i < data.length; i++) {
-                $('#messages').append("<p>" + data[i].M_Message + "</p>");
-            }
-        }
-        function sendMessage()
-        {
-            $.post(sendUrl, { message: $('#message').val() });
-        }
-        $(function () {
-            $('#send').on("click", sendMessage);
-            $('#login').on("click", sendLogin);
+        var site = {
+            httpserverUrl: "https://localhost:25221",
+            websocketUrl: "ws://localhost:25222/messageserver",
+            authUser: {},
 
-        })
+            sendLogin: function () {
+                var username = document.getElementById("username").value;
+                var password = document.getElementById("passwort").value;
+
+                $.post
+                ({
+                    url: site.httpserverUrl+"/auth",
+                    dataType: "json",
+                    data: {user: username, pass: password},
+                    success: function (response) {
+                        site.appendLog(response);     
+                                                        
+                        if (typeof response.token === "string") {
+                            site.authUser.name = username;
+                            site.authUser.token = response.token;
+                            site.authUser.websocketKey = response.websocketKey;
+                            site.createWebsocket();
+                        }
+                        else {
+                            site.authUser = {};
+                        }
+                    },
+                    error: function(msg) {
+                        site.appendLog(msg);
+                    }
+                });
+            },
+
+            sendMessage: function() {
+                var message = document.getElementById("message").value;
+                $.post
+                ({
+                    url: site.httpserverUrl+"/sendMessage",
+                    dataType: "json",
+                    data: {token: site.authUser.token, message: message},
+                    success: function (response) {
+                        site.appendLog(response);                           
+                    }
+                });                
+            },
+            
+            appendMessage: function(data) {
+                $("#messages").append("<p>"+data.autor+": " + data.message + "</p>");
+            },
+
+            appendLog: function(data) {
+                var now = new Date();
+                var message = typeof data === "object" ? JSON.stringify(data) : data.toString();
+                $("#log").append("<p>" + now.toISOString() + ": " + JSON.stringify(data) + "</p>");
+            },
+
+            createWebsocket: function() {
+                var ws = new WebSocket(site.websocketUrl+"/"+site.authUser.websocketKey);
+                ws.onerror = function (err) {
+                    site.appendLog(err.data);   
+                };
+                ws.onmessage = function (event) {
+                    site.appendMessage(JSON.parse(event.data));
+                };
+            }
+        };
+
     </script>
 </head>
 <body>
+    <div id="login">
     <form action="#">
-        <p>Username: <input type="text" size="20" name="username" id="username" /></p>
-        <p>Passwort: <input type="text" size="20" name="passwort" id="passwort" /> <a href="#" id="login">Anmelden</a></p>
+        <h1>Benutzerlogin</h1>
+        <p>Verwende Max mit Passwort 1234 oder Moritz mit Passwort 4321.</p>
+        <table>
+            <tr><td>Username:</td><td><input type="text" size="20" name="username" id="username" value="Max"/></td></tr>
+            <tr><td>Passwort:</td><td><input type="text" size="20" name="passwort" id="passwort" value="1234" /></td></tr> 
+            <tr><td>&nbsp;</td>   <td><a href="#" onclick="site.sendLogin()">Anmelden</a></td></tr>
+        </table>
+    </form>        
+    </div>
 
-        <p>Nachricht: <input type="text" size="40" name="message" id="message"/></p>
-        <p><a href="#" id="send">Über das Webservice auf Port 25221 senden.</a></p>
-    </form>
     <div id="messages">
+        <h1>Nachrichten</h1>
+        <p>Neue Nachricht: <input type="text" size="40" name="message" id="message"/><button value="Senden" onclick="site.sendMessage()">Senden</button></p>     
+    </div>
 
+    <div id="log">
+        <h1>Serverlog</h1>
     </div>
 </body>
 </html>

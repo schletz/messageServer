@@ -1,29 +1,55 @@
+"use strict";
 var ws     = require("nodejs-websocket");   // npm install nodejs-websocket
 var crypto = require('crypto');             // npm install crypto
 
 /*
  * Messageserver(json, json)
+ * Implementiert alle Funktionen zum Senden und Empfangen von Nachrichten.
  */
 function Messageserver(dbModel, config)
 {
-    this.userlist = {};
-    this.authTimeout =
-    this.model = dbModel;
+    var self = this;                         // Für die private Funktion onWebsocketConnect
+    this.userlist = {};                      // Alle angemeldeten User werden eingefügt.
+    this.authTimeout = config.authTimeout;   // Diese Anzahl von Sekunden nach dem letzten Request 
+    this.model = dbModel;                    // wird der Token ungültig.
 
     this.websocketServer = ws.
-        createServer(this.onWebsocketConnect).
+        createServer(onWebsocketConnect).
         listen(config.websocketPort);
 
-/*
-this.model.User.findOne({where: {username:"Max"}, defaults: {username: "Max", pass:"1234", email:"max@muster.at"}}).then(function(max)
-{
-    max.getMessages();
-    max.createMessage({text:"Hallo"}).then(function(maxMessage) {
-        maxMessage.getAutor().then(function(max) { console.log(JSON.stringify(max))});
-    });
-});
+    /*
+    * onWebsocketConnect(json)
+    * Wird aufgerufen, wenn eine Verbindung vom Client zum Socketserver aufgebaut wurde.
+    * Wenn der Client nicht den richtigen Pfad verwendet (ws://..../messageserver), dann wird
+    * die Verbindung sofort wieder geschlossen.
+    * @param {object} conn Repräsentiert die Socketverbindung
+    */
+    function onWebsocketConnect (conn) {
+        var matches = conn.path.match(/^\/messageserver\/([0-9a-f]{32,})$/);
+        var keyOk = false;
 
-*/
+        /* Ist der Key überhaupt ein Hexstring mit mind. 32 Stellen (128 bit)? */
+        if (matches === null) {
+            conn.close();
+            return;
+        }
+
+        /* Ist der Key gültig? */
+        for(var user in self.userlist) {
+            if (self.userlist[user].websocketKey === matches[1])   {  
+                keyOk = true;  
+                self.userlist[user].websocketKey = "";         // Key darf nur 1x verwendet werden.
+                break;  
+            }
+        }
+        if (keyOk) {
+            Messageserver.logger.show("Websocket client connected: " + conn.headers.origin);
+
+        }
+        else {
+            Messageserver.logger.show("Falscher Websocket Key: " + matches[1]);        
+        }
+    };
 }
 
 /* 
@@ -37,21 +63,6 @@ Messageserver.prototype.setHeader = function (req, res, next) {
     next();
 };
 
-/*
- * onWebsocketConnect(json)
- * Wird aufgerufen, wenn eine Verbindung vom Client zum Socketserver aufgebaut wurde.
- * Wenn der Client nicht den richtigen Pfad verwendet (ws://..../tetra), dann wird
- * die Verbindung sofort wieder geschlossen.
- *
- * conn: Das Connection Objekt der Verbindung.
- */
-Messageserver.prototype.onWebsocketConnect = function(conn) {
-    if (conn.path !== "/chatserver") {
-        conn.close();
-        return;
-    }
-    Messageserver.logger.show("Websocket client connected: " + conn.headers.origin);
-};
 
 /*
  * getMessages
@@ -86,32 +97,42 @@ Messageserver.prototype.getMessages = function (onSuccess, onError) {
  * Sendet allen verbundenen Clients die in messageStr enthaltene Nachricht. Weiters wird der String
  * in die Tabelle messages geschrieben.
  */
-Messageserver.prototype.sendMessageToAll = function (messageStr, onSuccess, onError) {
-    try {
-        this.dbConnection.query("INSERT INTO messages SET ?", { M_Message: messageStr });
-        this.websocketServer.connections.forEach(function (conn) {
+Messageserver.prototype.sendMessageToAll = function (autor, messageStr, onSuccess, onError) {
+    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
+    var onError   = typeof onError   === "function" ? onError   : function() {};
+    if (!isType("string", autor, messageStr))   {  onError("INVALID_ARGUMENT"); return;  }
+    var self = this;     // Für den Zugriff auf den Messageserver  in der findObe Callback Funktion.
+
+    /* Den User heraussuchen und die Nachricht bei ihm einfügen. Danach wird dieser Test über den
+     * Websocket Server an alle Clients gesendet.
+     */
+    this.model.User.findOne({where: {username: autor}}).then(function(result) {
+        result.createMessage({text: messageStr}).then(function(result) {
             try {
-                conn.sendText(messageStr);
+                self.websocketServer.connections.forEach(function (conn) {
+                    conn.sendText(JSON.stringify({autor: autor, message: messageStr}));
+                });
+                onSuccess({autor: autor, message: messageStr});
             }
             catch (err) {
-                if (typeof onError === "function") onError();
+                onError(err);
             }
-        });
-    if (typeof onSuccess === "function") onSuccess();
-    }
-    catch (err) {
-        if (typeof onError === "function") onError();
-    }
+        })
+    })
 };
 
 /*
 * checkCredentials
-* Prüft den übergebenen Token. Wenn dieser gültig ist, dann wird die in onSuccess übergebene 
+* Prüft den übergebenen Token. Dieser Token ist base64 Codiert und hat den Aufbau user:hash
+* user: Username, für den der Token geneiert wurde
+* hash: Hashwert von IP, Useragent und einer Zufallszahl
+*
+* Wenn dieser gültig ist, dann wird die in onSuccess übergebene 
 * Funktion aufgerufen und die Gültigkeitszeit des Tokens neu gesetzt.
 * @param {string} token Der übermittelte, zu prüfende Token.
 * @param {string} userAgent Der übermittelte HTTP User Agent.
 * @param {string} clientIp Die IP Adresse des Clients.
-* @param {function} onSuccess() Wird aufgerufen, wenn der Token gültig ist.
+* @param {function} onSuccess(username:string) Wird aufgerufen, wenn der Token gültig ist.
 * @param {function} onError(message:string) Wenn der Token üntültig ist, wird die message auf
 * "INVALID_ARGUMENT", "INVALID_TOKEN",  "NOT_AUTH", "AUTH_TIMEOUT" oder "INVALID_CREDENTIALS" 
 * gesetzt.
@@ -125,7 +146,7 @@ Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp,
     if (!isType("string", userAgent)) {  onError("INVALID_ARGUMENT");  return;  }
     if (!isType("string", clientIp )) {  onError("INVALID_ARGUMENT");  return;  }
 
-    var tokenDecoded = new Buffer(token, 'base64').toString('utf8').split(":");
+    var tokenDecoded = new Buffer(token, 'hex').toString('utf8').split(":");
     if (tokenDecoded.length != 2) {
         onError("INVALID_TOKEN");
         return;        
@@ -153,7 +174,7 @@ Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp,
     }
     /* Damit das Timeout von der letzten Aktivität gerechnet wird, setzen wir es neu. */
     userinfo.lastActivity = new Date().valueOf();
-    onSuccess();
+    onSuccess(tokenDecoded[0]);
 };
 
 /*
@@ -161,14 +182,14 @@ Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp,
  * Prüft die Daten des übergebenen Benutzers und liefert einen Token, der mit jedem Request 
  * mitgesendet wird. 
  * @param {json} userinfo {user:string, pass:string useragent:string, ip:string}
- * @param {function} onSuccess(token:string) Bei Erfolg wird der Token zurückgegeben
+ * @param {function} onSuccess(token:object) Ein JSON Objekt mit {token:string, websocketKey:string}
  * @param {function} onError(message:string) Im Fehlerfall wird INVALID_ARGUMENT, INVALID_USER oder 
  * INVALID_PASSWORD zurückgegeben.
  */
 Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onError) {
     var self = this;                          // Da in der Callback Methode der DB this sich ändert.
     var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
-    var onError = typeof onError === "function" ? onSuccess : function() {};
+    var onError   = typeof onError   === "function" ? onError   : function() {};
 
     if (!isType("string", userinfo.user, userinfo.pass)) {
         onError("INVALID_ARGUMENT");
@@ -188,7 +209,6 @@ Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onErr
                 var passwordHash = crypto.createHmac('sha256', currentUser.salt)
                                         .update(userinfo.pass)
                                         .digest('base64');
-                console.log(passwordHash);
 
                 /* Hash ungleich: falsches Passwort! */
                 if (passwordHash !== currentUser.pass) {
@@ -199,31 +219,32 @@ Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onErr
                 /* Alles OK: Token generieren und in die lokale Userliste des Servers eintragen */
                 var secret = crypto.randomBytes(32).toString('base64');
                 var toHash = userinfo.useragent +
-                            userinfo.ip +
-                            secret;
+                             userinfo.ip +
+                             secret;
                 var hashed = crypto.createHmac('sha256', secret)
                                 .update(toHash)
                                 .digest('base64');
                 var token = new Buffer(userinfo.user + ":" + hashed)
-                    .toString('base64');
+                    .toString('hex');
 
-                /* Zum Testen */
-                console.log("Token:", token);
-                console.log("Decodierder Token:", new Buffer(token, 'base64').toString('utf8'));
-
-                /* Das Secret und den Timestamp zu den Userinfos dazugeben und den User anlegen. */
+                /* Das Secret und den Timestamp zu den Userinfos dazugeben und den User anlegen. 
+                 * Weiters wird ein Key für den Websocket Server generiert, der ganau 1x für den
+                 * Connect verwendet werden kann */
                 userinfo.secret = secret;
                 userinfo.lastActivity = new Date().valueOf();
+                userinfo.websocketKey = crypto.randomBytes(32).toString('hex');
                 self.userlist[userinfo.user] = userinfo;
-                onSuccess(token);
+                onSuccess({token: token, websocketKey: userinfo.websocketKey});
             }
             else {
                 onError("INVALID_USER");
+                return;
             }
         }
         catch (err)
         {
             onError(err.message);
+            return;
         }
 
     }).catch(onError);
@@ -236,12 +257,12 @@ Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onErr
  */
 Messageserver.logger = {
     "show": function (message) {
-        var _date = new Date();
-        console.log(_date.toISOString() + " " + message.toString());
+        var now = new Date();
+        console.log("INFO@"+now.toISOString() + "\r\n" + message.toString());
     },
     "error": function (message) {
-        var _date = new Date();
-        console.error("\033[91m"+_date.toISOString() + " " + message.toString()+"\033[0m");
+        var now = new Date();
+        console.error("ERROR@"+now.toISOString() + "\r\n" + message.toString());
     }
 };
 

@@ -1,3 +1,4 @@
+"use strict";
 var Sequelize = require('sequelize');
 var crypto = require('crypto');        // Für das Erzeugen des Salt
 

@@ -1,3 +1,4 @@
+"use strict";
 /*
  * Laden der erforderlichen Module.
  */
@@ -61,27 +62,21 @@ app.use(bodyParser.urlencoded({     // to support URL-encoded bodies
  */
 function checkCredentials (req, res, next) {
     myServer.checkCredentials(req.body.token, req.headers["user-agent"] , 
-        req.connection.remoteAddress,  function() {
+        req.connection.remoteAddress,  function(currentUser) {
+            req.currentUser = currentUser;        // Den aktuellen User im Request setzen.
             next();
         }, function(err) {
             res.send(JSON.stringify({error: err}));
         });
 }
 
-app.all("/sendMessage", myServer.setHeader, function (req, res) {
-    var guid = uuid.v1(); // UUID V1, damit der generierte Wert aufsteigend ist.
-    // Wenn der Parameter message �ber POST gesendet wurde: diesen verwenden. 
-    // Ansonsten den GET Parameter message nehmen.
-    // Die Namen der Felder m�ssen mit denen in der Datenbank �bereinstimmen.
-    var messageData = {
-        M_ID: guid, M_ClientIP: req.connection.remoteAddress,
-        M_UserAgent: req.headers["user-agent"],
-        M_Message: req.body.message == null ? req.query.message : req.body.message
-    };
+app.all("/sendMessage", myServer.setHeader, checkCredentials, function (req, res) {
     try {
-        myServer.sendMessageToAll(messageData,
-            function () { res.send("OK"); },
-            function (err) { Messageserver.logger.error(err); }
+        myServer.sendMessageToAll(
+            req.currentUser,                   // Wird in checkCredentials gesetzt.
+            req.body.message,
+            function (sentMessage)   {  res.send(JSON.stringify(sentMessage));  },
+            function (err)           {  Messageserver.logger.error(err); }
         );
     }
     catch (err) {
@@ -120,7 +115,7 @@ app.all("/auth", myServer.setHeader, function (req, res) {
         }, 
         /* onSuccess */
         function(token) {
-            res.send(JSON.stringify({ token: token }));
+            res.send(JSON.stringify(token));
         }, 
         /* onError */
         function(message) {
@@ -149,6 +144,11 @@ console.log("\
     Websocket Port: " + websocketPort + "\n\
     "
 );
+
+/* HTTP Server unverschlüsselt */
+//app.listen(serverPort);
+
+/* HTTPS Server */
 var httpsServer = https.createServer(credentials, app).listen(serverPort);
 
 Messageserver.logger.show("Server started. Aufruf mit https://localhost:" + serverPort);
