@@ -5,15 +5,17 @@
   "scripts": {
     "start": "node ./bin/www"
   },
-  "description": "Webserver für Websocket Nachrichten",
+  "description": "Webserver fï¿½r Websocket Nachrichten",
   "author": {
     "name": "8admin"
   },
   "dependencies": {
-    "express": "~4.14.0",
-    "body-parser": "~1.15.2",
-    "mysql": "~2.11.1",
-    "nodejs-websocket": "~1.7.0",
-    "node-uuid": "~1.4.7"
+    "express": "*",
+    "body-parser": "*",
+    "mysql": "*",
+    "sqlite": "*",
+    "nodejs-websocket": "*",
+    "node-uuid": "*",
+    "sequelize": "*"
   }
 }
