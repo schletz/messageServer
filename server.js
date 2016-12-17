@@ -1,28 +1,3 @@
-/* TESTDATEN:
-CREATE DATABASE messageDb;
-USE messageDb;
-
-DROP TABLE IF EXISTS messages;
-CREATE TABLE messages (
-	M_ID          CHAR(36)      PRIMARY KEY,
-    M_Message     VARCHAR(255),
-    M_ClientIP    CHAR(15),
-    M_UserAgent   VARCHAR(255),
-    M_Created     TIMESTAMP
-);
-
-INSERT INTO messages (M_ID, M_Message, M_ClientIP, M_UserAgent) VALUES (UUID(), 'Eine Testnachricht',   '127.0.0.1', 'SQL');
-INSERT INTO messages (M_ID, M_Message, M_ClientIP, M_UserAgent) VALUES (UUID(), 'Eine 2. Testnachricht','127.0.0.1', 'SQL');
-SELECT * FROM messages;
-*/
-
-
-// INSTALLATION
-
-// 1) Mit git clone https://github.com/schletz/messageServer.git das Repository kopieren
-// 2) In diesem Verzeichnis mit npm install die abh�ngigen Pakete laden.
-// 3) Mit node server.js den Server starten.
-
 /*
  * Laden der erforderlichen Module.
  */
@@ -32,8 +7,8 @@ var bodyParser = require('body-parser');   // Damit POST Variablen gelesen werde
 var uuid = require('node-uuid');           // Um eine GUID zu generieren.
 var https = require('https');              // Der HTTP Server mit der listen Methode.
 
-var Db = require('./messageserver.database');  // Tabellendefinitionen laden
-var Messageserver = require('./messageserver.class');
+var Db = require('./messageserver.database');          // ORM Modelklassen laden
+var Messageserver = require('./messageserver.class'); 
 /*
  * Porteinstellungen. Niedere Ports (< 1024) erfordern u. U. root Rechte beim Ausführen des Servers.
  */
