@@ -1,6 +1,6 @@
 /*jslint node:true, this:true, white:true*/
 "use strict";
-var ws     = require("nodejs-websocket");   // npm install nodejs-websocket
+var ws = require("nodejs-websocket");   // npm install nodejs-websocket
 var crypto = require('crypto');             // npm install crypto
 
 /**
@@ -9,8 +9,7 @@ var crypto = require('crypto');             // npm install crypto
  * @param {object} dbModel Das Sequelize Datenbankmodell
  * @param {json} config {authTimeout:int, websocketPort:int}
  */
-function Messageserver(dbModel, config)
-{
+function Messageserver(dbModel, config) {
     var self = this;                         // Für die private Funktion onWebsocketConnect
     this.userlist = {};                      // Alle angemeldeten User werden eingefügt.
     this.authTimeout = config.authTimeout;   // Diese Anzahl von Sekunden nach dem letzten Request 
@@ -30,7 +29,7 @@ function Messageserver(dbModel, config)
     * die Verbindung sofort wieder geschlossen.
     * @param {object} conn Repräsentiert die Socketverbindung
     */
-    function onWebsocketConnect (conn) {
+    function onWebsocketConnect(conn) {
         var matches = conn.path.match(/^\/messageserver\/([0-9a-f]{32,})$/);
         var keyOk = false;
 
@@ -41,18 +40,18 @@ function Messageserver(dbModel, config)
         }
 
         /* Ist der Key gültig? */
-        Object.keys(self.userlist).forEach(function(user) {
-            if (self.userlist[user].websocketKey === matches[1])   {  
-                keyOk = true;  
+        Object.keys(self.userlist).forEach(function (user) {
+            if (self.userlist[user].websocketKey === matches[1]) {
+                keyOk = true;
                 self.userlist[user].websocketKey = "";         // Key darf nur 1x verwendet werden.
-                return;  
+                return;
             }
         });
         if (keyOk) {
             Messageserver.logger.show("Websocket client connected: " + conn.headers.origin);
         }
         else {
-            Messageserver.logger.show("Falscher Websocket Key: " + matches[1]);        
+            Messageserver.logger.show("Falscher Websocket Key: " + matches[1]);
         }
     }
 }
@@ -81,18 +80,18 @@ Messageserver.prototype.setHeader = function (req, res, next) {
  * funktioniert hat.
  */
 Messageserver.prototype.getMessages = function (onSuccess, onError) {
-    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
-    onError   = typeof onError   === "function" ? onError   : function() { return; };
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function () { return; };
+    onError = typeof onError === "function" ? onError : function () { return; };
 
     /* Auch den User zur Nachricht raussuchen. Siehe Eager loading auf 
      * http://docs.sequelizejs.com/en/latest/docs/models-usage/
      * Das as muss mit dem im Model bei belongsTo() definiertem Alias übereinstimmen.
      */
     this.model.Message.findAll({
-            attributes: ["created", "text"],
-            include:[{model:this.model.User, attributes: ["username", "email"], as:'autor'}]
-        }).then(
-        function(result) {
+        attributes: ["created", "text"],
+        include: [{ model: this.model.User, attributes: ["username", "email"], as: 'autor' }]
+    }).then(
+        function (result) {
             onSuccess(result);
         }).catch(function (err) { return onError(err.errors[0].message); });
 
@@ -117,20 +116,20 @@ Messageserver.prototype.getMessages = function (onSuccess, onError) {
  * Fehler aufgetreten ist.
  */
 Messageserver.prototype.sendMessageToAll = function (autor, messageStr, onSuccess, onError) {
-    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
-    onError   = typeof onError   === "function" ? onError   : function() { return; };
-    if (!isType("string", autor, messageStr))   {  onError("INVALID_ARGUMENT"); return;  }
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function () { return; };
+    onError = typeof onError === "function" ? onError : function () { return; };
+    if (!isType("string", autor, messageStr)) { onError("INVALID_ARGUMENT"); return; }
     var self = this;     // Für den Zugriff auf den Messageserver  in der findObe Callback Funktion.
 
     /* Den User heraussuchen und die Nachricht bei ihm einfügen. Danach wird dieser Test über den
      * Websocket Server an alle Clients gesendet. */
-    this.model.User.findOne({where: {username: autor}}).then(function(result) {
-        result.createMessage({text: messageStr}).then(function(result) {
+    this.model.User.findOne({ where: { username: autor } }).then(function (result) {
+        result.createMessage({ text: messageStr }).then(function (result) {
             try {
                 self.websocketServer.connections.forEach(function (conn) {
-                    conn.sendText(JSON.stringify({autor: autor, message: messageStr}));
+                    conn.sendText(JSON.stringify({ autor: autor, message: messageStr }));
                 });
-                onSuccess({autor: autor, message: messageStr});
+                onSuccess({ autor: autor, message: messageStr });
             }
             catch (err) {
                 return onError(err);
@@ -157,36 +156,36 @@ Messageserver.prototype.sendMessageToAll = function (autor, messageStr, onSucces
 * gesetzt.
 */
 Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp, onSuccess, onError) {
-    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
-    onError   = typeof onError   === "function" ? onError   : function() { return; };
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function () { return; };
+    onError = typeof onError === "function" ? onError : function () { return; };
 
     /* Argumente übergeben? */
-    if (!isType("string", token))     {  onError("INVALID_ARGUMENT");  return;  }
-    if (!isType("string", userAgent)) {  onError("INVALID_ARGUMENT");  return;  }
-    if (!isType("string", clientIp )) {  onError("INVALID_ARGUMENT");  return;  }
+    if (!isType("string", token)) { onError("INVALID_ARGUMENT"); return; }
+    if (!isType("string", userAgent)) { onError("INVALID_ARGUMENT"); return; }
+    if (!isType("string", clientIp)) { onError("INVALID_ARGUMENT"); return; }
 
     var tokenDecoded = new Buffer(token, 'hex').toString('utf8').split(":");
     if (tokenDecoded.length != 2) {
-        return onError("INVALID_TOKEN");       
+        return onError("INVALID_TOKEN");
     }
     /* Ist der User in unserer Userlist? */
     var userinfo = this.userlist[tokenDecoded[0]];
-    if (!isType("object", userinfo))  {  onError("NOT_AUTH"); return;  }
+    if (!isType("object", userinfo)) { onError("NOT_AUTH"); return; }
     /* 
      * Stimmt der Hashwert von IP, Useragent und Secret, wenn wir ihn neu generieren, 
      * mit dem übermittelten überein und ist er auch nicht abgelaufen? 
      */
     var toHash = userAgent + clientIp + userinfo.secret;
     var hashed = crypto.createHmac('sha256', userinfo.secret)
-                        .update(toHash)
-                        .digest('base64');
+        .update(toHash)
+        .digest('base64');
     /* Ist der Token abgelaufen? */
     if (new Date().valueOf() - this.authTimeout * 1000 > userinfo.lastActivity) {
-        return onError("AUTH_TIMEOUT");     
+        return onError("AUTH_TIMEOUT");
     }
     /* Stimmt der Hashwert noch? */
     if (tokenDecoded[1] !== hashed) {
-        return onError("INVALID_CREDENTIALS");     
+        return onError("INVALID_CREDENTIALS");
     }
     /* Damit das Timeout von der letzten Aktivität gerechnet wird, setzen wir es neu. */
     userinfo.lastActivity = new Date().valueOf();
@@ -205,40 +204,37 @@ Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp,
  */
 Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onError) {
     var self = this;                          // Da in der Callback Methode der DB this sich ändert.
-    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
-    onError   = typeof onError   === "function" ? onError   : function() { return; };
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function () { return; };
+    onError = typeof onError === "function" ? onError : function () { return; };
 
     if (!isType("string", userinfo.user, userinfo.pass)) {
         return onError("INVALID_ARGUMENT");
     }
 
     /* Den übergebenen User in der Datenbank suchen */
-    this.model.User.findOne({where: {username: userinfo.user}}).then(function(currentUser)
-    {
-        try
-        {
+    this.model.User.findOne({ where: { username: userinfo.user } }).then(function (currentUser) {
+        try {
             /* Benutzer ist vorhanden */
-            if (currentUser !== null)
-            {
+            if (currentUser !== null) {
                 /* Lässt sich aus dem Passwort und dem gespeicherten Salt der gespeicherten Hashwert
                 * generieren? */
                 var passwordHash = crypto.createHmac('sha256', currentUser.salt)
-                                        .update(userinfo.pass)
-                                        .digest('base64');
+                    .update(userinfo.pass)
+                    .digest('base64');
 
                 /* Hash ungleich: falsches Passwort! */
                 if (passwordHash !== currentUser.pass) {
                     return onError("INVALID_PASSWORD");
-                }                                  
+                }
 
                 /* Alles OK: Token generieren und in die lokale Userliste des Servers eintragen */
                 var secret = crypto.randomBytes(32).toString('base64');
                 var toHash = userinfo.useragent +
-                             userinfo.ip +
-                             secret;
+                    userinfo.ip +
+                    secret;
                 var hashed = crypto.createHmac('sha256', secret)
-                                .update(toHash)
-                                .digest('base64');
+                    .update(toHash)
+                    .digest('base64');
                 var token = new Buffer(userinfo.user + ":" + hashed)
                     .toString('hex');
 
@@ -249,14 +245,13 @@ Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onErr
                 userinfo.lastActivity = new Date().valueOf();
                 userinfo.websocketKey = crypto.randomBytes(32).toString('hex');
                 self.userlist[userinfo.user] = userinfo;
-                onSuccess({token: token, websocketKey: userinfo.websocketKey});
+                onSuccess({ token: token, websocketKey: userinfo.websocketKey });
             }
             else {
                 return onError("INVALID_USER");
             }
         }
-        catch (err)
-        {
+        catch (err) {
             return onError(err.message);
         }
     }).catch(function (err) { return onError(err.errors[0].message); });
@@ -269,21 +264,22 @@ Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onErr
  * @param {json} userdata Ein JSON Objekt mit {user:string, pass:string, email.string}
  * @param {function} onSuccess(result:object) Ein JSON Objekt mit der Zeile aus der Usertabelle.
  * @param {function} onError(message:string) Im Fehlerfall wird die SQL Fehlermeldung zurückgegeben.
- */ 
+ */
 Messageserver.prototype.createUser = function (userdata, onSuccess, onError) {
     var self = this;                          // Da in der Callback Methode der DB this sich ändert.
-    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
-    onError   = typeof onError   === "function" ? onError   : function() { return; }; 
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function () { return; };
+    onError = typeof onError === "function" ? onError : function () { return; };
     if (!isType("string", userdata.user, userdata.pass, userdata.email)) {
         return onError("INVALID_ARGUMENT");
     }
 
     this.model.User.create({
-        username: userdata.user, 
-        pass: userdata.pass, 
-        email: userdata.email}).then(function (result) {
-            onSuccess({user: result.username, email: result.email});
-        }).catch(function (err) { return onError(err.errors[0].message); });
+        username: userdata.user,
+        pass: userdata.pass,
+        email: userdata.email
+    }).then(function (result) {
+        onSuccess({ user: result.username, email: result.email });
+    }).catch(function (err) { return onError(err.errors[0].message); });
 };
 
 /**
@@ -294,11 +290,11 @@ Messageserver.prototype.createUser = function (userdata, onSuccess, onError) {
 Messageserver.logger = {
     "show": function (message) {
         var now = new Date();
-        console.log("INFO@"+now.toISOString() + "\r\n" + message.toString());
+        console.log("INFO@" + now.toISOString() + "\r\n" + message.toString());
     },
     "error": function (message) {
         var now = new Date();
-        console.error("ERROR@"+now.toISOString() + "\r\n" + message.toString());
+        console.error("ERROR@" + now.toISOString() + "\r\n" + message.toString());
     }
 };
 
