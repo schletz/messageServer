@@ -1,4 +1,4 @@
-# nodeWebservice
+# messageServer
 Ein Musterwebservice in Node JS mit folgenden Features:
 - token based authentication
 - https Verschlüsselung
