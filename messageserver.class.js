@@ -1,3 +1,4 @@
+/*jslint node:true, this:true, white:true*/
 "use strict";
 var ws     = require("nodejs-websocket");   // npm install nodejs-websocket
 var crypto = require('crypto');             // npm install crypto
@@ -35,13 +36,13 @@ function Messageserver(dbModel, config)
         }
 
         /* Ist der Key gültig? */
-        for(var user in self.userlist) {
+        Object.keys(self.userlist).forEach(function(user) {
             if (self.userlist[user].websocketKey === matches[1])   {  
                 keyOk = true;  
                 self.userlist[user].websocketKey = "";         // Key darf nur 1x verwendet werden.
-                break;  
+                return;  
             }
-        }
+        });
         if (keyOk) {
             Messageserver.logger.show("Websocket client connected: " + conn.headers.origin);
 
@@ -49,7 +50,7 @@ function Messageserver(dbModel, config)
         else {
             Messageserver.logger.show("Falscher Websocket Key: " + matches[1]);        
         }
-    };
+    }
 }
 
 /* 
@@ -72,8 +73,8 @@ Messageserver.prototype.setHeader = function (req, res, next) {
  * funktioniert hat.
  */
 Messageserver.prototype.getMessages = function (onSuccess, onError) {
-    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
-    var onError   = typeof onError   === "function" ? onError   : function() {};
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
+    onError   = typeof onError   === "function" ? onError   : function() { return; };
 
     /* Auch den User zur Nachricht raussuchen. Siehe Eager loading auf 
      * http://docs.sequelizejs.com/en/latest/docs/models-usage/
@@ -84,7 +85,7 @@ Messageserver.prototype.getMessages = function (onSuccess, onError) {
     }).catch (onError);
 
     /* So könnte man alle User mit ihren Nachrichten auslesen. Da kein as definiert wurde, muss es
-     * auch nicht angegeben werden.
+     * auch nicht angegeben werden. */
     /*
     this.model.User.findAll({include:[{model:this.model.Message}]}).then(function(result) {
         onSuccess(result);
@@ -98,8 +99,8 @@ Messageserver.prototype.getMessages = function (onSuccess, onError) {
  * in die Tabelle messages geschrieben.
  */
 Messageserver.prototype.sendMessageToAll = function (autor, messageStr, onSuccess, onError) {
-    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
-    var onError   = typeof onError   === "function" ? onError   : function() {};
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
+    onError   = typeof onError   === "function" ? onError   : function() { return; };
     if (!isType("string", autor, messageStr))   {  onError("INVALID_ARGUMENT"); return;  }
     var self = this;     // Für den Zugriff auf den Messageserver  in der findObe Callback Funktion.
 
@@ -117,8 +118,8 @@ Messageserver.prototype.sendMessageToAll = function (autor, messageStr, onSucces
             catch (err) {
                 onError(err);
             }
-        })
-    })
+        });
+    });
 };
 
 /*
@@ -138,8 +139,8 @@ Messageserver.prototype.sendMessageToAll = function (autor, messageStr, onSucces
 * gesetzt.
 */
 Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp, onSuccess, onError) {
-    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
-    var onError   = typeof onError   === "function" ? onError   : function() {};
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
+    onError   = typeof onError   === "function" ? onError   : function() { return; };
 
     /* Argumente übergeben? */
     if (!isType("string", token))     {  onError("INVALID_ARGUMENT");  return;  }
@@ -188,8 +189,8 @@ Messageserver.prototype.checkCredentials = function (token, userAgent, clientIp,
  */
 Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onError) {
     var self = this;                          // Da in der Callback Methode der DB this sich ändert.
-    var onSuccess = typeof onSuccess === "function" ? onSuccess : function() {};
-    var onError   = typeof onError   === "function" ? onError   : function() {};
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
+    onError   = typeof onError   === "function" ? onError   : function() { return; };
 
     if (!isType("string", userinfo.user, userinfo.pass)) {
         onError("INVALID_ARGUMENT");
@@ -246,13 +247,32 @@ Messageserver.prototype.createCredentials = function (userinfo, onSuccess, onErr
             onError(err.message);
             return;
         }
+    }).catch(function (err) { onError(err.errors[0].message); });
+};
 
-    }).catch(onError);
+/* 
+ * createUser
+ * Erstellt einen User in der Datenbank und gibt den gesamten Datensatz zurück.
+ * @param {json} requestBody Die POST Parameter des Requests. Es werden user, pass und email 
+ * erwartet.
+ * @param {function} onSuccess(result:object) Ein JSON Objekt mit der Zeile aus der Usertabelle.
+ * @param {function} onError(message:string) Im Fehlerfall wird die SQL Fehlermeldung zurückgegeben.
+ */ 
+Messageserver.prototype.createUser = function (requestBody, onSuccess, onError) {
+    var self = this;                          // Da in der Callback Methode der DB this sich ändert.
+    onSuccess = typeof onSuccess === "function" ? onSuccess : function() { return; };
+    onError   = typeof onError   === "function" ? onError   : function() { return; };    
+    this.model.User.create({
+        username: requestBody.user, 
+        pass: requestBody.pass, 
+        email: requestBody.email}).then(function (result) {
+            onSuccess(result);
+        }).catch(function (err) { onError(err.errors[0].message); });
 };
 
 /*
  * logger.show(string) bzw. logger.error(string)
- * Gibt den �bergebenen String mit einem Timestamp in der Konsole aus.
+ * Gibt den übergebenen String mit einem Timestamp in der Konsole aus.
  * Parameter message: Auszugebende Meldung
  */
 Messageserver.logger = {
@@ -268,7 +288,7 @@ Messageserver.logger = {
 
 /*
  * isType(string, variable1, variable2, ...)
- * Pr�ft, ob alle Variablen den im 1. Parameter angegebenen String entsprechen.
+ * Prüft, ob alle Variablen den im 1. Parameter angegebenen String entsprechen.
  * Der Typname kann folgende Werte beinhalten: 
  * "undefined", "object", "boolean", "number", "string", "symbol", "function"
  */

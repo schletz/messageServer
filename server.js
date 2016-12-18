@@ -1,3 +1,4 @@
+/*jslint node:true, this:true, white:true*/
 "use strict";
 /*
  * Laden der erforderlichen Module.
@@ -5,7 +6,6 @@
 var fs = require('fs');                    // Für das Lesen der Zertifikate.
 var express = require("express");          // Für das Routing.
 var bodyParser = require('body-parser');   // Damit POST Variablen gelesen werden können.
-var uuid = require('node-uuid');           // Um eine GUID zu generieren.
 var https = require('https');              // Der HTTP Server mit der listen Methode.
 
 var Db = require('./messageserver.database');          // ORM Modelklassen laden
@@ -25,7 +25,9 @@ var privateKey = fs.readFileSync('localhost.key', 'utf8');
 var certificate = fs.readFileSync('localhost.crt', 'utf8');
 var credentials = { key: privateKey, cert: certificate };
 
-/* Instanzieren des Servers mit den Datenbank- und Websocketeinstellungen */
+/* Instanzieren des Servers mit den Datenbank- und Websocketeinstellungen
+ * Für MySQL lautet der Connection String mysql://root:pass@localhost:3306/dbname
+ * Für SQLite ist sqlite://dbFilename zu verwenden. */
 var myServer = new Messageserver(Db.loadDatabase("sqlite://messagedb.db"), {
                                     websocketPort: websocketPort,
                                     authTimeout: 3600});
@@ -123,6 +125,22 @@ app.all("/auth", myServer.setHeader, function (req, res) {
         });
 });
 
+/*
+ * Route /createUser
+ * POST Parameter: user, pass, email
+ * Return: Userdatensatz oder error */
+app.all("/createUser", myServer.setHeader, function (req, res) {
+    myServer.createUser(req.body, 
+        /* onSuccess */
+        function(data) {
+            res.send(JSON.stringify(data));
+         }, 
+         /* onError */
+         function(message) {
+            res.send(JSON.stringify({ error: message }));
+        });
+});
+
 /* 
  * Default Route
  * Wenn kein Routing zutrifft, dann senden wir not found. 
@@ -133,16 +151,15 @@ app.use(function (req, res) {
 
 /* 
  * *************************************************************************************************
-   PORT �FFNEN
+   PORT ÖFFNEN
  * *************************************************************************************************
  */
-console.log("\
-    ************************ \n\
-    MESSAGESERVER IS RUNNING \n\
-    ************************ \n\
-    Webservice Port: " + serverPort + "\n\
-    Websocket Port: " + websocketPort + "\n\
-    "
+console.log(
+    "************************ \r\n"+
+    "MESSAGESERVER IS RUNNING \r\n" +
+    "************************ \r\n" +
+    "Webservice Port: " + serverPort + "\r\n" +
+    "Websocket Port: " + websocketPort + "\r\n"
 );
 
 /* HTTP Server unverschlüsselt */
