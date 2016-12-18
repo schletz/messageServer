@@ -15,7 +15,7 @@ module.exports.loadDatabase = function(connString)
     model.User = sequelize.define('Users', {        // Tabellenname Users
         guid: { type: Sequelize.UUID, primaryKey: true, defaultValue: Sequelize.UUIDV4, field: "U_GUID" },
         username: { type: Sequelize.STRING, allowNull: false, unique: true, field: "U_Username",
-            /* Benutzerdefinierte validateor Funktionen. Bei einem Fehler wird next mit einem
+            /* Benutzerdefinierte validator Funktionen. Bei einem Fehler wird next mit einem
             * Parameter aufgerufen. Wenn alles OK ist, muss next() aufgerufen werden. */        
             validate: {
                     checkLength: function(val, next) {
