@@ -19,6 +19,9 @@ werden. <b>Achtung:</b> damit der Server lauffähig ist, wird zu Testzwecken der
 Key für HTTPS mitgeliefert. Dieser muss natürlich durch eigene Keys ersetzt werden!
 Unter [http://www.selfsignedcertificate.com/] kann einfach ein solches Zertifikat generiert werden.
 
+Im Browser kann mit https://localhost die Installation getestet werden. Die index.html Datei im 
+public Verzeichnis erlaubt das Senden von Nachrichten und das Anlegen von Benutzern.
+
 ## Anpassung an ein eigenes Projekt
 1. <b>Die Modelklassen erstellen:</b> Die Datei <code>messageserver.database.js</code> ist eine gute Vorlage, 
 wie das Paket sequelize die Klassendefinitionen verlangt. Es müssen auch die 
