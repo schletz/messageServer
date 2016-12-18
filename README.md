@@ -28,10 +28,13 @@ wie das Paket sequelize die Klassendefinitionen verlangt. Es müssen auch die
 Fremdschlüsselbeziehungen dort modelliert werden. Für das Erstellen des Modelles gibt es zwar Tools
 für den Database First Ansatz, das händische Erstellen hat aber den Vorteil, dass auch gleich get 
 und set Methoden sowie Validatoren gleich mitdefiniert werden können.
-2. <b>Den Connectionstring anpassen:</b> In der server.js wird mit 
+2. <b>Eine eigene Klasse mit der Businesslogik erstellen:</b> Die Klasse Messageserver passt natürlich
+nicht zum eigenen Projekt. Einige Methoden wie das Anlegen der Token und der Konstruktor können aber 
+übernommen werden.
+3. <b>Den Connectionstring anpassen:</b> In der server.js wird mit 
 <code>Db.loadDatabase("sqlite://messagedb.db")</code> der Connectionstring übergeben. Dieser muss 
 natürlich auf eine eigene MySql oder Postgresql Datenbank verweisen.
-3. <b>Die Routen anpassen:</b> In der server.js können eigene Routen hinzugefügt werden.
+4. <b>Die Routen anpassen:</b> In der server.js können eigene Routen hinzugefügt werden.
 
 ###Anmerkung zur Authentifizierung 
 Die Methode <code>createCredentials</code> verlangt in der Usertabelle Spalten für Benutzername 
