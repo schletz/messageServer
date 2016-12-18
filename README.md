@@ -55,6 +55,6 @@ URL              | Beschreibung                                             | Me
 **/auth**        | Führt die Autentifizierung durch.                        | POST   | user:string, pass:string               | 200: {token:string, websocketKey:string} oder 200: {error:string}
 **/getMessages** | Liefert alle in der Datenbank gespeicherten Nachrichten. | POST   | token:string                           | 200: [{created:string, text:string, autor: {username:string, email:string}},...] oder 200: {error:string}
 **/sendMessage** | Sendet die Nachricht an alle Clients.                    | POST   | message:string, token:string           | 200: {autor:string,message:string} oder 200: {error:string}
-**/public**      | Filserver für statische Dateien.                         |        |                                        | 200 oder 404 (Not found)
+**/public**      | Filserver für statische Dateien.                         |  GET      |                                        | 200 oder 404 (Not found)
 
 
