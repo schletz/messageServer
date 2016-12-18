@@ -89,8 +89,8 @@ app.all("/sendMessage", myServer.setHeader, checkCredentials, function (req, res
 app.all("/getMessages", myServer.setHeader, checkCredentials, function (req, res) {
     myServer.getMessages(function (rows) {         // OnSuccess
         res.send(JSON.stringify(rows));
-    }, function (err)  {                           // OnError
-        Messageserver.logger.error(err); 
+    }, function (message)  {                           // OnError
+        res.send(JSON.stringify({error: message}));
     });   
 });
 
