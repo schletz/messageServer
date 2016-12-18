@@ -49,7 +49,7 @@ Die Funktion `checkCredentials` wird bei allen Express Routen verwendet, wo ein 
 Token übergeben werden muss. 
 
 ## Webservice Definition
-URL              | Beschreibung                                             | Method | POST Parameter                         | HTTP Response
+URL              | Beschreibung                                             | Method | POST Parameter (x-www-form-urlencoded) | HTTP Response
 -----------------|----------------------------------------------------------|--------|----------------------------------------|-------------------
 **/createUser**  | Erstellt einen Benutzer.                                 | POST   | user:string, pass:string, email:string | 200: {user:string, email:string} oder 200: {error:string}
 **/auth**        | Führt die Autentifizierung durch.                        | POST   | user:string, pass:string               | 200: {token:string, websocketKey:string} oder 200: {error:string}
