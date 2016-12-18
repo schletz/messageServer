@@ -13,7 +13,7 @@ var Messageserver = require('./messageserver.class');
 /*
  * Porteinstellungen. Niedere Ports (< 1024) erfordern u. U. root Rechte beim Ausführen des Servers.
  */
-var serverPort = 25221;
+var serverPort = 443;
 var websocketPort = 25222;
 
 /*
@@ -58,20 +58,14 @@ app.use(bodyParser.urlencoded({     // to support URL-encoded bodies
  * *************************************************************************************************
  */
 
-/* 
- * Weiterleitung an die checkCredentials Funktion des Servers. Notwendig, da sonst this in der 
- * checkCredentials Methode auf die nodejs Instanz zeigt.
+/** 
+ * Sendet die übergebene Nachricht über den Websocket an alle Clients und trägt sie in die
+ * Datenbank ein.
+ * @method /sendMessage
+ * @param {POST} token:string
+ * @param {POST} message:string
+ * @returns {json} {autor:string,message:string} oder {error:string}
  */
-function checkCredentials (req, res, next) {
-    myServer.checkCredentials(req.body.token, req.headers["user-agent"] , 
-        req.connection.remoteAddress,  function(currentUser) {
-            req.currentUser = currentUser;        // Den aktuellen User im Request setzen.
-            next();
-        }, function(err) {
-            res.send(JSON.stringify({error: err}));
-        });
-}
-
 app.all("/sendMessage", myServer.setHeader, checkCredentials, function (req, res) {
     try {
         myServer.sendMessageToAll(
@@ -86,12 +80,11 @@ app.all("/sendMessage", myServer.setHeader, checkCredentials, function (req, res
     }
 });
 
-/* 
- * Route /getMessages
+/**
  * Sendet alle in der Datenbank eingetragenen Nachrichten an den Client.
- * POST Parameter: keine
- * GET Parameter: keine
- * Return: [{M_ID: string, M_Message: string, M_ClientIP: string, M_UserAgent: string}...]
+ * @method /getMessages
+ * @param {POST} token:string
+ * @returns {json} [{created:string, text:string, autor: {username:string, email:string}},...]
  */
 app.all("/getMessages", myServer.setHeader, checkCredentials, function (req, res) {
     myServer.getMessages(function (rows) {         // OnSuccess
@@ -101,12 +94,15 @@ app.all("/getMessages", myServer.setHeader, checkCredentials, function (req, res
     });   
 });
 
-/*
- * Route /auth
- * POST Parameter: user, pass
- * GET Parameter: keine
- * Return: {token: (token)} wenn OK, 
- *         {error: "USER_INVALID"} wenn die Daten falsch sind
+
+/**
+ * Führt eine Autentifizierung mit dem übergebenen Usernamen und Passwort gegen die Datenbank
+ * durch.
+ * @method /auth
+ * @param {POST} user:string
+ * @param {POST} pass:string
+ * @returns {json} {token:string, websocketKey:string} oder 
+ * {error:("INVALID_ARGUMENT"|"INVALID_USER"|"INVALID_PASSWORD"}
  */
 app.all("/auth", myServer.setHeader, function (req, res) {
     myServer.createCredentials({
@@ -121,26 +117,33 @@ app.all("/auth", myServer.setHeader, function (req, res) {
         }, 
         /* onError */
         function(message) {
-            res.send(JSON.stringify({ error: message }));
+            res.send(JSON.stringify({error: message}));
         });
 });
 
-/*
- * Route /createUser
- * POST Parameter: user, pass, email
- * Return: Userdatensatz oder error */
+/**
+ * Erstellt einen Benutzer.
+ * @method /createUser
+ * @param {POST} user:string
+ * @param {POST} pass:string
+ * @param {POST} email:string
+ * @returns {json} {user:string, email:string} oder 
+ * {error:("INVALID_ARGUMENT"|string)}
+ */
 app.all("/createUser", myServer.setHeader, function (req, res) {
-    myServer.createUser(req.body, 
+    myServer.createUser({user:req.body.user, pass: req.body.pass, email: req.body.email}, 
         /* onSuccess */
         function(data) {
             res.send(JSON.stringify(data));
          }, 
          /* onError */
          function(message) {
-            res.send(JSON.stringify({ error: message }));
+            res.send(JSON.stringify({error: message}));
         });
 });
 
+/* Im public Ordner statische Dateien ausliefern */
+app.use(express.static('public'));
 /* 
  * Default Route
  * Wenn kein Routing zutrifft, dann senden wir not found. 
@@ -148,6 +151,25 @@ app.all("/createUser", myServer.setHeader, function (req, res) {
 app.use(function (req, res) {
     res.sendStatus(404);
 });
+
+/* 
+ * *************************************************************************************************
+   HILFSFUNKTIONEN
+ * *************************************************************************************************
+ */
+/* 
+ * Weiterleitung an die checkCredentials Funktion des Servers. Notwendig, da sonst this in der 
+ * checkCredentials Methode auf die nodejs Instanz zeigt.
+ */
+function checkCredentials (req, res, next) {
+    myServer.checkCredentials(req.body.token, req.headers["user-agent"] , 
+        req.connection.remoteAddress,  function(currentUser) {
+            req.currentUser = currentUser;        // Den aktuellen User im Request setzen.
+            next();
+        }, function(err) {
+            res.send(JSON.stringify({error: err}));
+        });
+}
 
 /* 
  * *************************************************************************************************
